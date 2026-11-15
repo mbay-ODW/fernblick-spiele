@@ -219,7 +219,7 @@ class App {
 
   // --- Spiel-Info und Start -------------------------------------------------------------
   private variante(info: SpielInfo, opt: Record<string, string>) {
-    return info.optionen.map((o) => opt[o.id] ?? o.standard).join("-");
+    return info.optionen.filter((o) => !o.steuerung).map((o) => opt[o.id] ?? o.standard).join("-");
   }
 
   spielInfo(info: SpielInfo) {

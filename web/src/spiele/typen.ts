@@ -3,7 +3,11 @@ import { Welt } from "../welt";
 import { Figur } from "../figur";
 import { Eingabe } from "../eingabe";
 
-export interface Option { id: string; titel: string; werte: [string, string][]; standard: string }
+export interface Option {
+  id: string; titel: string; werte: [string, string][]; standard: string;
+  /** reine Steuerungs-Einstellung: zählt nicht für die Bestenliste (keine eigene Variante) */
+  steuerung?: boolean;
+}
 
 export interface SpielInfo {
   id: string;
@@ -86,9 +90,13 @@ export const SPIELE: SpielInfo[] = [
   },
   {
     id: "drohne", titel: "Drohnenrennen", emoji: "🚁", kurz: "Flieg durch die Ringe rund ums Haus",
-    text: "Steuere eine kleine Drohne von der Terrasse aus durch alle leuchtenden Ringe: über den Garten, um die Bäume, an der Hecke entlang, über den Hof und das Dach und zurück. Der gelbe Ring ist der nächste. Hoch: Leertaste/E oder ⬆, runter: Umschalt/Q oder ⬇, drehen mit Maus oder Wischen.",
+    text: "Steuere eine kleine Drohne von der Terrasse aus durch alle leuchtenden Ringe: über den Garten, um die Bäume, an der Hecke entlang, über den Hof und das Dach und zurück. Der gelbe Ring ist der nächste. Hoch: Leertaste/E oder ⬆, runter: Umschalt/Q oder ⬇, drehen mit Maus oder Wischen. Hoch und runter geht auch mit Wischen/Maus nach oben und unten – auf Wunsch umgekehrt.",
     bereit: true, wertung: "zeit",
-    optionen: [{ id: "ringe", titel: "Strecke", werte: [["leicht", "Leicht (große Ringe)"], ["schwer", "Schwer (kleine Ringe, mehr)"]], standard: "leicht" }],
+    optionen: [
+      { id: "ringe", titel: "Strecke", werte: [["leicht", "Leicht (große Ringe)"], ["schwer", "Schwer (kleine Ringe, mehr)"]], standard: "leicht" },
+      { id: "hoehe", titel: "Hoch/Runter mit Wischen oder Maus", steuerung: true,
+        werte: [["normal", "⬆ Normal (nach oben = hoch)"], ["umgekehrt", "🔄 Umgekehrt (wie Flugzeug)"], ["aus", "Aus (nur Knöpfe)"]], standard: "normal" },
+    ],
   },
   {
     id: "escape", titel: "Escape-Room", emoji: "🔐", kurz: "Finde den Code und entkomme",

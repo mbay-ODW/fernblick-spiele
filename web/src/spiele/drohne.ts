@@ -66,6 +66,7 @@ export class DrohnenSpiel implements Spiel {
   private k!: Kontext;
   private drohne!: ReturnType<typeof drohneBauen>;
   private body!: RAPIER.RigidBody;
+  private wischHoch = 0;
   private collider!: RAPIER.Collider;
   private ctrl!: RAPIER.KinematicCharacterController;
   private ringe: Ring[] = [];
@@ -151,6 +152,13 @@ export class DrohnenSpiel implements Spiel {
     e.sprung(); // Leertaste setzt sonst den Sprung-Merker der Figur
     const b = e.blickAbholen();
     this.gier -= b.dx * (e.touch ? 0.0042 : 0.0026);
+    // Hoch/runter auch per Wischen bzw. Maus (Option: normal, umgekehrt wie beim Flugzeug, aus)
+    const art = k.optionen.hoehe ?? "normal";
+    if (art !== "aus") {
+      const vz = art === "umgekehrt" ? 1 : -1;
+      this.wischHoch = Math.max(-5, Math.min(5, this.wischHoch + vz * b.dy * (e.touch ? 0.09 : 0.05)));
+    }
+    this.wischHoch *= Math.exp(-dt * 5);
     const steuern = this.laeuft && !k.figur.gesperrt;
     // Wunschgeschwindigkeit
     const ziel = new THREE.Vector3();
@@ -161,7 +169,7 @@ export class DrohnenSpiel implements Spiel {
       ziel.z = (-cos * e.vor - sin * e.seit) * tempo;
       const hoch = e.taste("Space") || e.taste("KeyE") || e.knoepfe.hoch;
       const runter = e.taste("ShiftLeft") || e.taste("ShiftRight") || e.taste("KeyQ") || e.taste("KeyC") || e.knoepfe.runter;
-      ziel.y = (hoch ? 4 : 0) - (runter ? 4 : 0);
+      ziel.y = (hoch ? 4 : 0) - (runter ? 4 : 0) + this.wischHoch;
     }
     this.v.lerp(ziel, Math.min(1, dt * 3.5));
     const schweben = Math.sin(this.phase * 2.3) * 0.04;
