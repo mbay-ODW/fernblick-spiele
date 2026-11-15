@@ -17,6 +17,22 @@ export interface WeltDaten {
 let rapierBereit: Promise<void> | null = null;
 export const rapierLaden = () => (rapierBereit ??= RAPIER.init());
 
+/** Öffenbare Tür aus der Hauswelt: Haustür (dreht nach innen) oder Schiebeflügel der Glasfront */
+export interface Tuer {
+  id: string;
+  art: "dreh" | "schiebe";
+  obj: THREE.Object3D;
+  collider: RAPIER.Collider;
+  mitte: THREE.Vector3;
+  offen: boolean;
+  anteil: number;
+  pivot?: THREE.Object3D;
+  winkel?: number;
+  start?: THREE.Vector3;
+  richtung?: THREE.Vector3;
+  weg?: number;
+}
+
 export class Welt {
   renderer: THREE.WebGLRenderer;
   szene = new THREE.Scene();
@@ -31,6 +47,10 @@ export class Welt {
   /** Schnitt von oben (Kamera „oben“): alles über dieser Höhe wird ausgeblendet */
   schnitt = new THREE.Plane(new THREE.Vector3(0, -1, 0), 1e6);
   private uhr = new THREE.Clock();
+  /** Türen (Haustür, Glasfront) – antippen oder E zum Öffnen */
+  tueren: Tuer[] = [];
+  /** z. B. Escape-Room: Türen bleiben zu */
+  tuerenGesperrt = false;
   private wiese!: THREE.Mesh;
   private schleifen = new Set<(dt: number) => void>();
   private envTex: THREE.Texture;
@@ -75,6 +95,7 @@ export class Welt {
     wiese.receiveShadow = true;
     this.wiese = wiese;
     this.szene.add(wiese);
+    this.schleife((dt) => this.tuerenAnimieren(dt));
     new ResizeObserver(() => this.groesse()).observe(behaelter);
     this.groesse();
   }
@@ -112,6 +133,7 @@ export class Welt {
       if (!m.isMesh) return;
       const e = m.userData ?? {};
       if (e.art === "panorama") return; // Foto-Hintergrund: nicht anfassbar
+      if (tuerTeil(m)) return; // Türen bekommen eigene, schaltbare Kollision
       const glas = e.art === "glas" || (Array.isArray(m.material) ? false : (m.material as THREE.Material).transparent);
       m.castShadow = !glas && !e.keinSchatten;
       m.receiveShadow = true;
@@ -127,6 +149,7 @@ export class Welt {
       else for (let i = 0; i < p.count; i++) idx.push(basis + i);
     });
     this.physik.createCollider(RAPIER.ColliderDesc.trimesh(new Float32Array(pos), new Uint32Array(idx)));
+    this.tuerenAufbauen();
     // Boden draußen: bei mitgeliefertem Gelände nur als Fangnetz tief unten
     this.physik.createCollider(RAPIER.ColliderDesc.cuboid(300, 0.05, 300).setTranslation(3.9, mitGelaende ? -30 : -0.11, 5.5));
     // Strahl-Abfragen (Verstecke, Kamera) brauchen die Kollision schon vor dem ersten Bild
@@ -159,6 +182,76 @@ export class Welt {
     return () => this.schleifen.delete(fn);
   }
 
+  private tuerenAufbauen() {
+    this.tueren = [];
+    const wurzeln: THREE.Object3D[] = [];
+    this.haus.traverse((o) => { if (o.userData?.art === "tuer_blatt" || o.userData?.schiebe) wurzeln.push(o); });
+    for (const o of wurzeln) {
+      const u = o.userData;
+      const box = new THREE.Box3().setFromObject(o);
+      const mitte = box.getCenter(new THREE.Vector3()), halb = box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+      const collider = this.physik.createCollider(RAPIER.ColliderDesc.cuboid(Math.max(halb.x, 0.02), halb.y, Math.max(halb.z, 0.02)).setTranslation(mitte.x, mitte.y, mitte.z));
+      const t: Tuer = { id: String(u.oeffnung ?? o.name), art: u.schiebe ? "schiebe" : "dreh", obj: o, collider, mitte, offen: false, anteil: 0 };
+      if (t.art === "dreh" && Array.isArray(u.scharnier)) {
+        const pivot = new THREE.Object3D();
+        pivot.position.set(u.scharnier[0], 0, u.scharnier[1]);
+        this.haus.add(pivot);
+        pivot.updateMatrixWorld(true);
+        pivot.attach(o);
+        // Drehrichtung: Türblatt schwenkt nach innen
+        const innen = new THREE.Vector2(u.innen?.[0] ?? 0, u.innen?.[1] ?? 1);
+        const r = new THREE.Vector2(mitte.x - u.scharnier[0], mitte.z - u.scharnier[1]);
+        const gedreht = (w: number) => new THREE.Vector2(r.x * Math.cos(w) + r.y * Math.sin(w), -r.x * Math.sin(w) + r.y * Math.cos(w));
+        t.winkel = gedreht(Math.PI / 2).dot(innen) > gedreht(-Math.PI / 2).dot(innen) ? Math.PI / 2 * 0.95 : -Math.PI / 2 * 0.95;
+        t.pivot = pivot;
+      } else {
+        this.haus.attach(o);
+        t.start = o.position.clone();
+        t.richtung = new THREE.Vector3(u.richtung?.[0] ?? 1, 0, u.richtung?.[1] ?? 0).normalize();
+        t.weg = Number(u.weg) || 1.5;
+      }
+      this.tueren.push(t);
+    }
+  }
+
+  /** Nächste Tür in Reichweite (Abstand zur Türmitte am Boden) */
+  tuerBei(p: THREE.Vector3, max = 1.8): Tuer | null {
+    let best: Tuer | null = null, d = max;
+    for (const t of this.tueren) {
+      const a = Math.hypot(t.mitte.x - p.x, t.mitte.z - p.z);
+      if (a < d && Math.abs(t.mitte.y - 1 - p.y) < 1.6) { d = a; best = t; }
+    }
+    return best;
+  }
+
+  /** Tür öffnen/schließen; false, wenn gesperrt */
+  tuerUmschalten(t: Tuer): boolean {
+    if (this.tuerenGesperrt) return false;
+    t.offen = !t.offen;
+    t.collider.setEnabled(!t.offen);
+    return true;
+  }
+
+  tuerenZu() {
+    for (const t of this.tueren) { t.offen = false; t.anteil = 0; t.collider.setEnabled(true); this.tuerStellen(t); }
+    this.tuerenGesperrt = false;
+  }
+
+  private tuerStellen(t: Tuer) {
+    const a = t.anteil * t.anteil * (3 - 2 * t.anteil);
+    if (t.pivot) t.pivot.rotation.y = (t.winkel ?? 0) * a;
+    else if (t.start && t.richtung) t.obj.position.copy(t.start).addScaledVector(t.richtung, (t.weg ?? 1.5) * a);
+  }
+
+  private tuerenAnimieren(dt: number) {
+    for (const t of this.tueren) {
+      const ziel = t.offen ? 1 : 0;
+      if (t.anteil === ziel) continue;
+      t.anteil = ziel > t.anteil ? Math.min(1, t.anteil + dt * 1.6) : Math.max(0, t.anteil - dt * 1.6);
+      this.tuerStellen(t);
+    }
+  }
+
   start() {
     if (this.laeuft) return;
     this.laeuft = true;
@@ -177,4 +270,10 @@ export class Welt {
   stopp() {
     this.laeuft = false;
   }
+}
+
+/** Gehört das Objekt zu einer öffenbaren Tür (Türblatt oder Schiebeflügel samt Rahmen)? */
+function tuerTeil(o: THREE.Object3D | null): boolean {
+  for (; o; o = o.parent) if (o.userData?.art === "tuer_blatt" || o.userData?.schiebe) return true;
+  return false;
 }

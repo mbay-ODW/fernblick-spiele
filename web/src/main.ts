@@ -2,7 +2,7 @@
 import "./stil.css";
 import * as THREE from "three";
 import { api } from "./api";
-import { Welt, Qualitaet } from "./welt";
+import { Tuer, Welt, Qualitaet } from "./welt";
 import { Figur, KameraModus, KAMERA_NAME, KAMERA_REIHE } from "./figur";
 import { Avatar, AvatarCfg, AUSWAHL, STANDARD_AVATAR } from "./avatar";
 import { Eingabe } from "./eingabe";
@@ -334,6 +334,7 @@ class App {
     this.hudBauen();
     const figur = new Figur(welt, this.profil.avatar, this.profil.kamera);
     const eingabe = new Eingabe(welt.renderer.domElement, this.hud);
+    welt.tuerenZu();
     const spiel = MODULE[info.id]();
     const mitspieler = zusammen ? new Mitspieler(welt, zusammen.raum, figur) : null;
     const lauf: NonNullable<App["lauf"]> = { spiel, info, optionen, figur, eingabe, aus: () => {}, pausiert: false, fertig: false, mitspieler, zusammen };
@@ -360,8 +361,11 @@ class App {
       figur.update(dt, eingabe);
       spiel.update(dt);
       mitspieler?.update(dt);
-      while (eingabe.tipps.length) { const t = eingabe.tipps.shift()!; spiel.tipp?.(t.x, t.y); }
-      if (eingabe.einmal("aktion")) spiel.tipp?.(innerWidth / 2, innerHeight / 2);
+      while (eingabe.tipps.length) { const t = eingabe.tipps.shift()!; if (!this.tuerAntippen(t.x, t.y)) spiel.tipp?.(t.x, t.y); }
+      if (eingabe.einmal("aktion")) { const t = welt.tuerBei(figur.fuss()); if (t) this.tuerSchalten(t); else spiel.tipp?.(innerWidth / 2, innerHeight / 2); }
+      const naheTuer = welt.tueren.length ? welt.tuerBei(figur.fuss()) : null;
+      const tk = document.getElementById("tuerKnopf");
+      if (tk) { tk.hidden = !naheTuer; if (naheTuer) tk.textContent = naheTuer.offen ? "🚪 zu" : "🚪 auf"; }
       document.getElementById("ansichtName")!.textContent = KAMERA_NAME[figur.modus];
       document.getElementById("fadenkreuz")!.hidden = !(document.pointerLockElement && figur.modus === "ich");
     });
@@ -378,10 +382,30 @@ class App {
       h("div", { id: "meldung", class: "meldung", hidden: true }, ""),
       h("div", { id: "fadenkreuz", class: "fadenkreuz", hidden: true }, "+"),
       h("div", { id: "spielknoepfe", class: "spielknoepfe" }),
+      h("button", { id: "tuerKnopf", class: "spielknopf tuerknopf", hidden: true, onclick: () => { const l = this.lauf; const t = l && this.welt?.tuerBei(l.figur.fuss()); if (t) this.tuerSchalten(t); } }, "🚪"),
       h("div", { id: "leiste", class: "leiste" }),
       geraet ? h("button", { class: "sprung", ontouchstart: (e: Event) => { e.preventDefault(); this.lauf?.eingabe.springen(); } }, "⤒") : null,
     ].filter((x) => !!x) as HTMLElement[]);
     this.hud.hidden = false;
+  }
+
+  // --- Türen (Haustür, Glasfront): antippen, E oder 🚪-Knopf ------------------------------------
+  private tuerSchalten(t: Tuer) {
+    if (!this.welt?.tuerUmschalten(t)) this.meldung("🔒 Verriegelt!", 1200);
+  }
+
+  /** Antippen einer Tür (bis 3,5 m vom Kopf) */
+  private tuerAntippen(x: number, y: number): boolean {
+    const w = this.welt, l = this.lauf;
+    if (!w || !l || !w.tueren.length) return false;
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1), w.kamera);
+    const treffer = ray.intersectObjects(w.tueren.map((t) => t.obj), true)[0];
+    if (!treffer) return false;
+    const t = w.tueren.find((q) => { let o: THREE.Object3D | null = treffer.object; for (; o; o = o.parent) if (o === q.obj) return true; return false; });
+    if (!t || t.mitte.distanceTo(l.figur.kopf()) > 3.5) return false;
+    this.tuerSchalten(t);
+    return true;
   }
 
   /** Spielknopf rechts: hält eingabe.knoepfe[id], solange gedrückt */

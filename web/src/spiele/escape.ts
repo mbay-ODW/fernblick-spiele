@@ -124,6 +124,7 @@ export class EscapeSpiel implements Spiel {
   start(k: Kontext) {
     this.k = k;
     k.welt.tageszeit(false);
+    k.welt.tuerenGesperrt = true; // Haustür und Glasfront bleiben zu, bis der Code stimmt
     const schwer = k.optionen.stufe === "schwer";
     this.reihenfolge = mischen(FARBEN);
     // Glasfront verriegelt: unsichtbare Sperre davor (Modell y ≈ 11,25, x 0..7,78)
@@ -397,6 +398,7 @@ export class EscapeSpiel implements Spiel {
 
   ende() {
     const k = this.k;
+    k.welt.tuerenGesperrt = false;
     this.feldSchliessen();
     for (const c of this.karten) k.welt.szene.remove(c.gruppe);
     this.karten = [];

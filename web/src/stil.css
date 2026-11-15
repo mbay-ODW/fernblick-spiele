@@ -110,3 +110,5 @@ button.zweit { background: #e7dfcc; color: var(--text); font-size: 17px; font-we
 .leiste .farbknopf.an { border-color: var(--gold); transform: scale(1.15); }
 .tastenfeld { display: grid; grid-template-columns: repeat(3, 64px); gap: 8px; justify-content: center; }
 .tastenfeld button { height: 56px; font-size: 24px; font-weight: 900; border-radius: 12px; background: #e7dfcc; }
+.tuerknopf { position: absolute; right: max(24px, env(safe-area-inset-right)); top: 34%; font-size: 20px; }
+.tuerknopf[hidden] { display: none; }
