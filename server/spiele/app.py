@@ -159,8 +159,20 @@ def ich() -> dict[str, Any]:
 
 
 # --- Hauswelt -----------------------------------------------------------------------------
+_letzte_pruefung = 0.0
+
+
 @app.get("/api/welt/meta", dependencies=[Depends(angemeldet)])
-def welt_meta() -> dict[str, Any]:
+async def welt_meta() -> dict[str, Any]:
+    """Fragt beim Öffnen eines Spiels kurz beim Planer nach (höchstens alle 20 s), damit eine gerade
+    übergebene Spielwelt sofort da ist und nicht erst beim nächsten 10-Minuten-Abruf."""
+    global _letzte_pruefung
+    if time.monotonic() - _letzte_pruefung > 20:
+        _letzte_pruefung = time.monotonic()
+        try:
+            return await welt_abrufen()
+        except Exception as e:  # noqa: BLE001 – Planer nicht erreichbar: lokale Kopie nutzen
+            log.warning("Spielwelt-Abruf fehlgeschlagen: %s", e)
     return speicher.welt_meta()
 
 
