@@ -26,6 +26,8 @@ export class Figur {
   private kamAbstand = 3.2;
   /** Gesperrt (Pause, Endbildschirm): keine Bewegung */
   gesperrt = false;
+  /** Ruht: Spiel steuert selbst (z. B. Drohne) – keine Bewegung, keine Kamera, Blick wird nicht abgeholt */
+  ruht = false;
 
   constructor(private welt: Welt, cfg: AvatarCfg, modus: KameraModus) {
     const s = welt.daten.start;
@@ -74,6 +76,7 @@ export class Figur {
   }
 
   update(dt: number, e: Eingabe) {
+    if (this.ruht) return;
     const b = e.blickAbholen();
     const empf = e.touch ? 0.0042 : 0.0026;
     this.gier -= b.dx * empf;

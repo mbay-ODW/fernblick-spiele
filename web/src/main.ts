@@ -30,6 +30,10 @@ const zeitText = (ms: number) => {
   return `${m}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 };
 
+/** Wert in der Bestenliste: Punkte-Spiele zeigen Punkte, sonst die Zeit */
+const wertText = (info: SpielInfo, x: { zeit_ms: number; punkte: number }) =>
+  info.wertung === "punkte" ? `${x.punkte} ${info.einheit ?? "Punkte"}` : zeitText(x.zeit_ms);
+
 const geraet = matchMedia("(pointer: coarse)").matches;
 
 class App {
@@ -211,7 +215,7 @@ class App {
     const ladeListe = () => {
       liste.replaceChildren(h("li", { class: "leise" }, "lädt …"));
       api.bestzeiten(info.id, this.variante(info, opt)).then((l: any[]) => {
-        liste.replaceChildren(...(l.length ? l.map((x) => h("li", { class: x.name === this.profil.name ? "ich" : "" }, h("span", {}, x.name), h("span", {}, zeitText(x.zeit_ms)))) : [h("li", { class: "leise" }, "Noch keine Zeiten – sei der Erste!")]));
+        liste.replaceChildren(...(l.length ? l.map((x) => h("li", { class: x.name === this.profil.name ? "ich" : "" }, h("span", {}, x.name), h("span", {}, wertText(info, x)))) : [h("li", { class: "leise" }, "Noch keine Einträge – sei der Erste!")]));
       }).catch(() => liste.replaceChildren());
     };
     const optionen = info.optionen.map((o) => h("div", { class: "zeile" }, h("label", {}, o.titel), h("div", { class: "chips" },
@@ -224,11 +228,11 @@ class App {
     this.zeigen(h("div", { class: "karte mitte info" },
       h("div", { class: "info-kopf" }, h("span", { class: "emoji gross-emoji" }, info.emoji), h("h2", {}, info.titel)),
       h("p", {}, info.text), ...optionen,
-      h("h3", {}, "🏆 Bestenliste"), liste,
+      info.ohneListe ? null : h("h3", {}, "🏆 Bestenliste"), info.ohneListe ? null : liste,
       h("div", { class: "knoepfe" },
         h("button", { class: "gross", onclick: () => { this.profil.optionen[info.id] = { ...opt }; this.speichern(false); this.spielStarten(info, opt); } }, "▶ Spielen"),
         h("button", { class: "zweit", onclick: () => this.menue() }, "Zurück"))));
-    ladeListe();
+    if (!info.ohneListe) ladeListe();
   }
 
   private async weltBereit(): Promise<Welt> {
@@ -255,7 +259,10 @@ class App {
     const spiel = MODULE[info.id]();
     const lauf = { spiel, info, optionen, figur, eingabe, aus: () => {}, pausiert: false, fertig: false };
     this.lauf = lauf;
-    const k: Kontext = { welt, figur, eingabe, optionen, hud: { anzeige: (t) => (document.getElementById("anzeige")!.textContent = t), meldung: (t, ms) => this.meldung(t, ms) },
+    const k: Kontext = { welt, figur, eingabe, optionen,
+      hud: { anzeige: (t) => (document.getElementById("anzeige")!.textContent = t), meldung: (t, ms) => this.meldung(t, ms),
+        knopf: (id, text, beiDruck) => this.hudKnopf(eingabe, id, text, beiDruck), leiste: () => document.getElementById("leiste")! },
+      spieler: { name: this.profil.name, avatar: this.profil.avatar },
       fertig: (e) => this.spielFertig(e) };
     spiel.start(k);
     lauf.aus = welt.schleife((dt) => {
@@ -280,9 +287,21 @@ class App {
       h("div", { id: "ansichtName", class: "ansicht-name" }, ""),
       h("div", { id: "meldung", class: "meldung", hidden: true }, ""),
       h("div", { id: "fadenkreuz", class: "fadenkreuz", hidden: true }, "+"),
+      h("div", { id: "spielknoepfe", class: "spielknoepfe" }),
+      h("div", { id: "leiste", class: "leiste" }),
       geraet ? h("button", { class: "sprung", ontouchstart: (e: Event) => { e.preventDefault(); this.lauf?.eingabe.springen(); } }, "⤒") : null,
     ].filter((x) => !!x) as HTMLElement[]);
     this.hud.hidden = false;
+  }
+
+  /** Spielknopf rechts: hält eingabe.knoepfe[id], solange gedrückt */
+  private hudKnopf(eingabe: Eingabe, id: string, text: string, beiDruck?: () => void): HTMLElement {
+    const an = (e: Event) => { e.preventDefault(); eingabe.knoepfe[id] = true; beiDruck?.(); };
+    const aus = (e: Event) => { e.preventDefault(); eingabe.knoepfe[id] = false; };
+    const b = h("button", { class: "spielknopf", ontouchstart: an, ontouchend: aus, ontouchcancel: aus,
+      onmousedown: (e: MouseEvent) => { e.stopPropagation(); an(e); }, onmouseup: aus, onmouseleave: aus }, text);
+    document.getElementById("spielknoepfe")!.append(b);
+    return b;
   }
 
   private meldungTimer = 0;
@@ -333,13 +352,14 @@ class App {
     const liste = h("ol", { class: "bestenliste" });
     const platz = h("p", { class: "platz" }, "");
     setTimeout(() => this.zeigen(h("div", { class: "karte schmal mitte" },
-      h("div", { class: "logo" }, "🏆"), h("h2", {}, e.text), h("p", { class: "zeit-gross" }, zeitText(e.zeit_ms)), platz, liste,
+      h("div", { class: "logo" }, "🏆"), h("h2", {}, e.text), h("p", { class: "zeit-gross" }, wertText(l.info, e)), platz, liste,
       h("button", { class: "gross", onclick: () => { const { info, optionen } = l; this.spielBeenden(); this.spielStarten(info, optionen); } }, "↻ Nochmal"),
       h("button", { class: "zweit", onclick: () => { this.spielBeenden(); this.menue(); } }, "☰ Menü"))), 900);
+    if (l.info.ohneListe) return;
     try {
       const r = await api.bestzeit({ spiel: l.info.id, variante, name: this.profil.name, zeit_ms: e.zeit_ms, punkte: e.punkte });
       platz.textContent = r.platz === 1 ? "🥇 Neuer Rekord!" : `Platz ${r.platz}`;
-      liste.replaceChildren(...r.liste.map((x: any) => h("li", { class: x.name === this.profil.name && x.zeit_ms === e.zeit_ms ? "ich" : "" }, h("span", {}, x.name), h("span", {}, zeitText(x.zeit_ms)))));
+      liste.replaceChildren(...r.liste.map((x: any) => h("li", { class: x.name === this.profil.name && x.zeit_ms === e.zeit_ms ? "ich" : "" }, h("span", {}, x.name), h("span", {}, wertText(l.info, x)))));
     } catch { platz.textContent = ""; }
   }
 

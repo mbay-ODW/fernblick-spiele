@@ -126,6 +126,10 @@ export class Eingabe {
 
   springen() { this.sprungGedrueckt = true; }
 
+  /** Taste gerade gedrückt (KeyboardEvent.code, z. B. "KeyQ", "ShiftLeft") */
+  taste(code: string): boolean { return this.tasten.has(code); }
+  /** Spiel-Knöpfe im HUD (gedrückt halten), siehe Hud.knopf */
+  knoepfe: Record<string, boolean> = {};
   /** einmal pro Bild abholen */
   sprung(): boolean { const s = this.sprungGedrueckt; this.sprungGedrueckt = false; return s; }
   blickAbholen(): { dx: number; dy: number } { const b = { ...this.blick }; this.blick.dx = this.blick.dy = 0; return b; }

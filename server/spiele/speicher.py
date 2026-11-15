@@ -43,6 +43,8 @@ def db() -> Iterator[sqlite3.Connection]:
             variante TEXT NOT NULL, name TEXT NOT NULL, zeit_ms INTEGER NOT NULL, punkte INTEGER NOT NULL DEFAULT 0,
             welt_version INTEGER NOT NULL DEFAULT 0, zeit TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS bz_spiel ON bestzeiten (spiel, variante, zeit_ms);
+        CREATE TABLE IF NOT EXISTS bauwerke (name TEXT PRIMARY KEY, bloecke TEXT NOT NULL DEFAULT '[]',
+            geaendert TEXT NOT NULL);
         """
     )
     try:
@@ -78,10 +80,15 @@ def name_pruefen(name: str) -> str:
 
 
 # --- Bestzeiten ---------------------------------------------------------------------
+# Spiele, bei denen Punkte zählen (mehr ist besser); sonst die kürzeste Zeit
+PUNKTE_SPIELE = {"lava", "tycoon"}
+
+
 def bestzeiten(spiel: str, variante: str, anzahl: int = 10) -> list[dict[str, Any]]:
+    ordnung = "punkte DESC, zeit_ms ASC" if spiel in PUNKTE_SPIELE else "zeit_ms ASC"
     with db() as c:
         rows = c.execute("SELECT name, zeit_ms, punkte, zeit FROM bestzeiten WHERE spiel=? AND variante=? "
-                         "ORDER BY zeit_ms ASC, id ASC LIMIT ?", (spiel, variante, anzahl)).fetchall()
+                         f"ORDER BY {ordnung}, id ASC LIMIT ?", (spiel, variante, anzahl)).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -93,8 +100,13 @@ def bestzeit_eintragen(spiel: str, variante: str, name: str, zeit_ms: int, punkt
     with db() as c:
         c.execute("INSERT INTO bestzeiten (spiel, variante, name, zeit_ms, punkte, welt_version, zeit) VALUES (?,?,?,?,?,?,?)",
                   (spiel, variante, name, int(zeit_ms), int(punkte), int(welt_version), jetzt()))
-        platz = c.execute("SELECT COUNT(*) FROM bestzeiten WHERE spiel=? AND variante=? AND zeit_ms < ?",
-                          (spiel, variante, int(zeit_ms))).fetchone()[0] + 1
+        if spiel in PUNKTE_SPIELE:
+            platz = c.execute("SELECT COUNT(*) FROM bestzeiten WHERE spiel=? AND variante=? AND (punkte > ? OR "
+                              "(punkte = ? AND zeit_ms < ?))", (spiel, variante, int(punkte), int(punkte),
+                                                                int(zeit_ms))).fetchone()[0] + 1
+        else:
+            platz = c.execute("SELECT COUNT(*) FROM bestzeiten WHERE spiel=? AND variante=? AND zeit_ms < ?",
+                              (spiel, variante, int(zeit_ms))).fetchone()[0] + 1
     return {"platz": platz, "liste": bestzeiten(spiel, variante)}
 
 
@@ -118,3 +130,30 @@ def welt_ablegen(meta: dict[str, Any], glb: bytes, welt: bytes) -> None:
     meta = {**meta, "abgeholt": jetzt()}
     (d / "meta.json.tmp").write_text(json.dumps(meta))
     (d / "meta.json.tmp").replace(d / "meta.json")
+
+
+# --- Kreativ: Bauwerke je Spieler -------------------------------------------------------------
+MAX_BLOECKE = 4000
+
+
+def bauwerk(name: str) -> list[list[Any]]:
+    name = name_pruefen(name)
+    with db() as c:
+        r = c.execute("SELECT bloecke FROM bauwerke WHERE name=?", (name,)).fetchone()
+    return json.loads(r["bloecke"]) if r else []
+
+
+def bauwerk_setzen(name: str, bloecke: list[Any]) -> int:
+    """Blöcke als [x, y, z, farbe] (Rasterkoordinaten, ganze Zahlen; farbe = Index)."""
+    name = name_pruefen(name)
+    if not isinstance(bloecke, list) or len(bloecke) > MAX_BLOECKE:
+        raise ValueError(f"höchstens {MAX_BLOECKE} Blöcke")
+    sauber = []
+    for b in bloecke:
+        if not (isinstance(b, list) and len(b) == 4 and all(isinstance(v, int) and abs(v) < 2000 for v in b)):
+            raise ValueError("Block muss [x, y, z, farbe] mit ganzen Zahlen sein")
+        sauber.append(b)
+    with db() as c:
+        c.execute("INSERT INTO bauwerke (name, bloecke, geaendert) VALUES (?,?,?) ON CONFLICT(name) DO UPDATE SET "
+                  "bloecke=excluded.bloecke, geaendert=excluded.geaendert", (name, json.dumps(sauber), jetzt()))
+    return len(sauber)

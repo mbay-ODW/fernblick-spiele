@@ -13,11 +13,22 @@ export interface SpielInfo {
   text: string;
   bereit: boolean;
   optionen: Option[];
+  /** "zeit" (Standard, kürzeste Zeit gewinnt) oder "punkte" (meiste Punkte gewinnen, Server: PUNKTE_SPIELE) */
+  wertung?: "zeit" | "punkte";
+  /** Einheit der Punkte für Bestenliste und Endbildschirm, z. B. "Sekunden", "Münzen", "Nächte" */
+  einheit?: string;
+  /** ohne Bestenliste (Kreativ, Verstecken online) */
+  ohneListe?: boolean;
 }
 
 export interface Hud {
   anzeige(text: string): void;
   meldung(text: string, ms?: number): void;
+  /** Zusätzlicher runder Knopf rechts (über dem Sprungknopf); solange gedrückt ist eingabe.knoepfe[id] = true.
+   *  beiDruck wird beim Drücken aufgerufen (für Einmal-Aktionen). Gibt das Element zurück (Text änderbar). */
+  knopf(id: string, text: string, beiDruck?: () => void): HTMLElement;
+  /** Freie HUD-Fläche unten mittig (z. B. Inventar, Farbpalette); wird beim Spielende geleert */
+  leiste(): HTMLElement;
 }
 
 export interface Kontext {
@@ -26,6 +37,8 @@ export interface Kontext {
   eingabe: Eingabe;
   hud: Hud;
   optionen: Record<string, string>;
+  /** Name und Avatar des Spielers (für Online-Spiele und Speicherstände) */
+  spieler: { name: string; avatar: any };
   /** Spiel zu Ende: Zeit in ms (für die Bestenliste), Text für den Endbildschirm */
   fertig(ergebnis: { zeit_ms: number; punkte: number; text: string }): void;
 }

@@ -79,3 +79,40 @@ def test_welt_abruf_vom_planer(client, monkeypatch, tmp_path):
     n = len(aufrufe)
     client.post("/api/welt/aktualisieren")
     assert len(aufrufe) == n + 1  # gleiche Version: nur meta.json
+
+
+def _anmelden(client):
+    assert client.post("/api/anmelden", json={"kennwort": "Fernblick-Familie"}).status_code == 200
+
+
+def test_punkte_spiele_und_bauwerke(client):
+    _anmelden(client)
+    for name, punkte in (("Elias", 40), ("Murat", 90)):
+        client.post("/api/bestzeiten", json={"spiel": "lava", "variante": "normal", "name": name, "zeit_ms": 60000,
+                                             "punkte": punkte})
+    liste = client.get("/api/bestzeiten", params={"spiel": "lava", "variante": "normal"}).json()
+    assert [x["name"] for x in liste] == ["Murat", "Elias"]
+    assert client.get("/api/kreativ/Elias").json() == {"bloecke": []}
+    assert client.put("/api/kreativ/Elias", json={"bloecke": [[1, 2, 3, 4]]}).json() == {"anzahl": 1}
+    assert client.get("/api/kreativ/Elias").json()["bloecke"] == [[1, 2, 3, 4]]
+    assert client.put("/api/kreativ/Elias", json={"bloecke": [[1, 2, "x", 4]]}).status_code == 400
+
+
+def test_verstecken_raum(client):
+    from starlette.websockets import WebSocketDisconnect
+    with pytest.raises(WebSocketDisconnect), client.websocket_connect("/api/ws/verstecken/ABC") as ws:
+        ws.receive_json()  # ohne Anmeldung: geschlossen
+    _anmelden(client)
+    with client.websocket_connect("/api/ws/verstecken/abc") as a:
+        ida = a.receive_json()["id"]
+        a.receive_json()
+        with client.websocket_connect("/api/ws/verstecken/ABC") as b:
+            b.receive_json()
+            assert len(b.receive_json()["liste"]) == 2
+            a.receive_json()
+            b.send_json({"typ": "hallo", "name": "Elias", "avatar": {"haut": 1}})
+            assert any(x["name"] == "Elias" for x in a.receive_json()["liste"])
+            b.receive_json()
+            a.send_json({"typ": "pos", "p": [1, 2, 3]})
+            m = b.receive_json()
+            assert m["typ"] == "pos" and m["von"] == ida

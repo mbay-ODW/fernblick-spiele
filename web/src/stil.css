@@ -99,3 +99,14 @@ button.zweit { background: #e7dfcc; color: var(--text); font-size: 17px; font-we
 .knueppel[hidden] { display: none; }
 .knueppel-griff { position: absolute; left: 50%; top: 50%; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%; background: #fffc; }
 .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #000c; color: #fff; padding: 12px 20px; border-radius: 14px; font-weight: 800; z-index: 9; }
+.spielknoepfe { position: absolute; right: max(24px, env(safe-area-inset-right)); bottom: calc(max(28px, env(safe-area-inset-bottom)) + 100px); display: flex; flex-direction: column-reverse; gap: 12px; align-items: flex-end; }
+.spielknopf { pointer-events: auto; min-width: 66px; height: 66px; padding: 0 12px; border-radius: 33px; background: #fff3; border: 3px solid #fffb !important; color: #fff; font-size: 26px; font-weight: 900; backdrop-filter: blur(2px); }
+.spielknopf.an { background: #f2c230cc; color: #22301e; }
+.leiste { position: absolute; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 70vw; }
+.leiste > * { pointer-events: auto; }
+.leiste:empty { display: none; }
+.leiste .feld { background: #000a; color: #fff; border-radius: 12px; padding: 6px 12px; font-weight: 800; font-size: 16px; }
+.leiste .farbknopf { width: 40px; height: 40px; border-radius: 10px; border: 3px solid #fff; }
+.leiste .farbknopf.an { border-color: var(--gold); transform: scale(1.15); }
+.tastenfeld { display: grid; grid-template-columns: repeat(3, 64px); gap: 8px; justify-content: center; }
+.tastenfeld button { height: 56px; font-size: 24px; font-weight: 900; border-radius: 12px; background: #e7dfcc; }

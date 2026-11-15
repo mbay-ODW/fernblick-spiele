@@ -5,8 +5,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import json
 import logging
 import os
+import re
+import secrets
 import socket
 import time
 from collections.abc import AsyncIterator
@@ -15,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -112,17 +115,19 @@ def _client_ip(request: Request) -> str:
     return ip
 
 
-def angemeldet(request: Request) -> None:
+def _sitzung_ok(wert: str) -> bool:
     if os.environ.get("SPIELE_DEV") == "1":
-        return
-    wert = request.cookies.get(COOKIE, "")
+        return True
     try:
         bis, sig = wert.split(".", 1)
-        if int(bis) > time.time() and _kennwort() and hmac.compare_digest(sig, _sig("sitzung", bis, _kennwort_marke())):
-            return
+        return int(bis) > time.time() and bool(_kennwort()) and hmac.compare_digest(sig, _sig("sitzung", bis, _kennwort_marke()))
     except ValueError:
-        pass
-    raise HTTPException(401, "Bitte anmelden")
+        return False
+
+
+def angemeldet(request: Request) -> None:
+    if not _sitzung_ok(request.cookies.get(COOKIE, "")):
+        raise HTTPException(401, "Bitte anmelden")
 
 
 @app.get("/api/health")
@@ -217,6 +222,76 @@ def bestzeit(daten: dict[str, Any] = Body(...)) -> dict[str, Any]:
     return speicher.bestzeit_eintragen(daten.get("spiel", ""), daten.get("variante", ""), daten.get("name", ""),
                                        int(daten.get("zeit_ms", 0)), int(daten.get("punkte", 0)),
                                        int(speicher.welt_meta().get("version", 0)))
+
+
+# --- Kreativ: Bauwerke ---------------------------------------------------------------------
+@app.get("/api/kreativ/{name}", dependencies=[Depends(angemeldet)])
+def kreativ_lesen(name: str) -> dict[str, Any]:
+    return {"bloecke": speicher.bauwerk(name)}
+
+
+@app.put("/api/kreativ/{name}", dependencies=[Depends(angemeldet)])
+def kreativ_speichern(name: str, daten: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return {"anzahl": speicher.bauwerk_setzen(name, daten.get("bloecke") or [])}
+
+
+# --- Verstecken online: Räume mit Code, der Server reicht Nachrichten nur weiter -------------------
+_raeume: dict[str, dict[str, dict[str, Any]]] = {}
+MAX_IM_RAUM = 6
+
+
+async def _an_alle(raum: dict[str, dict[str, Any]], nachricht: dict[str, Any], ausser: str = "") -> None:
+    for sid, m in list(raum.items()):
+        if sid != ausser:
+            with suppress(Exception):
+                await m["ws"].send_json(nachricht)
+
+
+def _spielerliste(raum: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    return {"typ": "spieler", "liste": [{"id": sid, "name": m["name"], "avatar": m["avatar"]} for sid, m in raum.items()]}
+
+
+@app.websocket("/api/ws/verstecken/{code}")
+async def verstecken(ws: WebSocket, code: str) -> None:
+    code = re.sub(r"[^A-Z0-9]", "", code.upper())[:6]
+    if not _sitzung_ok(ws.cookies.get(COOKIE, "")) or not code:
+        await ws.close(code=4401)
+        return
+    raum = _raeume.setdefault(code, {})
+    if len(raum) >= MAX_IM_RAUM:
+        await ws.close(code=4403)
+        return
+    await ws.accept()
+    sid = secrets.token_hex(4)
+    raum[sid] = {"ws": ws, "name": "?", "avatar": {}}
+    try:
+        await ws.send_json({"typ": "du", "id": sid})
+        await _an_alle(raum, _spielerliste(raum))
+        while True:
+            text = await ws.receive_text()
+            if len(text) > 8000:
+                continue
+            try:
+                msg = json.loads(text)
+            except ValueError:
+                continue
+            if not isinstance(msg, dict):
+                continue
+            if msg.get("typ") == "hallo":
+                raum[sid]["name"] = str(msg.get("name", "?"))[:24]
+                raum[sid]["avatar"] = msg.get("avatar") if isinstance(msg.get("avatar"), dict) else {}
+                await _an_alle(raum, _spielerliste(raum))
+                continue
+            msg["von"] = sid
+            await _an_alle(raum, msg, ausser=sid)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        raum.pop(sid, None)
+        if raum:
+            await _an_alle(raum, _spielerliste(raum))
+        else:
+            _raeume.pop(code, None)
 
 
 # --- Oberfläche ---------------------------------------------------------------------------
