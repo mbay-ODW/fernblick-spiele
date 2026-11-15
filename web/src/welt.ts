@@ -31,6 +31,7 @@ export class Welt {
   /** Schnitt von oben (Kamera „oben“): alles über dieser Höhe wird ausgeblendet */
   schnitt = new THREE.Plane(new THREE.Vector3(0, -1, 0), 1e6);
   private uhr = new THREE.Clock();
+  private wiese!: THREE.Mesh;
   private schleifen = new Set<(dt: number) => void>();
   private envTex: THREE.Texture;
   laeuft = false;
@@ -67,10 +68,12 @@ export class Welt {
     this.lampe.target.position.set(0, -0.1, -1);
     this.szene.add(this.kamera);
     // Wiese rund ums Haus
+    // (nur für ältere Hauswelten ohne Gelände; neuere bringen Gelände und Außenanlage aus dem Planer mit)
     const wiese = new THREE.Mesh(new THREE.CircleGeometry(120, 48), new THREE.MeshStandardMaterial({ color: 0x5f7a3e, roughness: 1 }));
     wiese.rotation.x = -Math.PI / 2;
     wiese.position.set(3.9, -0.06, 5.5);
     wiese.receiveShadow = true;
+    this.wiese = wiese;
     this.szene.add(wiese);
     new ResizeObserver(() => this.groesse()).observe(behaelter);
     this.groesse();
@@ -96,6 +99,9 @@ export class Welt {
     this.haus.clear();
     this.haus.add(gltf.scene);
     this.haus.updateMatrixWorld(true);
+    let mitGelaende = false;
+    gltf.scene.traverse((o) => { if (o.userData?.art === "gelaende" || o.name.startsWith("Gel")) mitGelaende = true; });
+    this.wiese.visible = !mitGelaende;
     this.physik?.free();
     this.physik = new RAPIER.World({ x: 0, y: -18, z: 0 });
     // Kollision: alle Dreiecke des Hauses in einem Trimesh, dazu der Boden draußen
@@ -105,6 +111,7 @@ export class Welt {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
       const e = m.userData ?? {};
+      if (e.art === "panorama") return; // Foto-Hintergrund: nicht anfassbar
       const glas = e.art === "glas" || (Array.isArray(m.material) ? false : (m.material as THREE.Material).transparent);
       m.castShadow = !glas && !e.keinSchatten;
       m.receiveShadow = true;
@@ -120,7 +127,8 @@ export class Welt {
       else for (let i = 0; i < p.count; i++) idx.push(basis + i);
     });
     this.physik.createCollider(RAPIER.ColliderDesc.trimesh(new Float32Array(pos), new Uint32Array(idx)));
-    this.physik.createCollider(RAPIER.ColliderDesc.cuboid(80, 0.05, 80).setTranslation(3.9, -0.11, 5.5));
+    // Boden draußen: bei mitgeliefertem Gelände nur als Fangnetz tief unten
+    this.physik.createCollider(RAPIER.ColliderDesc.cuboid(300, 0.05, 300).setTranslation(3.9, mitGelaende ? -30 : -0.11, 5.5));
     // Strahl-Abfragen (Verstecke, Kamera) brauchen die Kollision schon vor dem ersten Bild
     this.physik.step();
     this.tageszeit(false);
