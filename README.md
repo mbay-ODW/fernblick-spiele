@@ -10,7 +10,17 @@ dort im Reiter **Teilen → „Spielwelt übergeben“**. Der Spiele-Server holt
 | Spiel | Stand |
 |---|---|
 | 💎 Schatzsuche – Schätze auf, unter und neben Möbeln finden, Tag oder Nacht mit Taschenlampe | fertig |
-| 🌋 Der Boden ist Lava · 🏃 Parcours · 🚁 Drohnenrennen · 🔐 Escape-Room · 🧱 Kreativ · 💰 Tycoon · 🙈 Verstecken online | geplant |
+| 🌋 Der Boden ist Lava – die Lava steigt, wie lange hältst du durch? (auch zusammen) | fertig |
+| 🏃 Parcours – Ringe der Reihe nach, optional „Boden verboten“ (auch als Wettrennen zusammen) | fertig |
+| 🚁 Drohnenrennen – durch Ringe rund ums Haus | fertig |
+| 🔐 Escape-Room – vier Ziffernkarten finden, Code am Tastenfeld | fertig |
+| 🧱 Kreativ – Klötzchen bauen, wird je Spieler gespeichert | fertig |
+| 💰 Ferienhaus-Tycoon – Gästewünsche erfüllen, Münzen und Sterne | fertig |
+| 🔥 Feuerwache – Holz hacken, Ofen im HWR heizen, Nachtschatten fürchten das Licht (Idee: Elias) | fertig |
+| 🙈 Verstecken online – mehrere Geräte, Raum mit Code | fertig |
+
+Zusammen spielen (Lava, Parcours, Verstecken): ein Gerät öffnet einen Raum, die anderen geben den Code ein. Der Server
+(`/api/ws/verstecken/{code}`) reicht Nachrichten nur weiter; Positionen gehen 10× pro Sekunde raus.
 
 Jedes Spiel ist ein Modul unter `web/src/spiele/` (Schnittstelle `Spiel` in `typen.ts`) und erscheint als Kachel im Menü.
 

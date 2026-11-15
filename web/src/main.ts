@@ -8,8 +8,21 @@ import { Avatar, AvatarCfg, AUSWAHL, STANDARD_AVATAR } from "./avatar";
 import { Eingabe } from "./eingabe";
 import { SPIELE, SpielInfo, Spiel, Kontext } from "./spiele/typen";
 import { Suchspiel } from "./spiele/suchen";
+import { LavaSpiel } from "./spiele/lava";
+import { ParcoursSpiel } from "./spiele/parcours";
+import { KreativSpiel } from "./spiele/kreativ";
+import { TycoonSpiel } from "./spiele/tycoon";
+import { VersteckenSpiel } from "./spiele/verstecken";
+import { DrohnenSpiel } from "./spiele/drohne";
+import { EscapeSpiel } from "./spiele/escape";
+import { FeuerwacheSpiel } from "./spiele/feuerwache";
+import { Raum, Mitspieler, neuerCode, zufallMitSamen } from "./mehrspieler";
 
-const MODULE: Record<string, () => Spiel> = { suchen: () => new Suchspiel() };
+const MODULE: Record<string, () => Spiel> = {
+  suchen: () => new Suchspiel(), lava: () => new LavaSpiel(), parcours: () => new ParcoursSpiel(),
+  kreativ: () => new KreativSpiel(), tycoon: () => new TycoonSpiel(), verstecken: () => new VersteckenSpiel(),
+  drohne: () => new DrohnenSpiel(), escape: () => new EscapeSpiel(), feuerwache: () => new FeuerwacheSpiel(),
+};
 
 interface Profil { name: string; avatar: AvatarCfg; kamera: KameraModus; qualitaet: Qualitaet; optionen: Record<string, Record<string, string>> }
 
@@ -43,7 +56,8 @@ class App {
   profil: Profil;
   welt: Welt | null = null;
   weltVersion = -1;
-  private lauf: { spiel: Spiel; info: SpielInfo; optionen: Record<string, string>; figur: Figur; eingabe: Eingabe; aus: () => void; pausiert: boolean; fertig: boolean } | null = null;
+  private lauf: { spiel: Spiel; info: SpielInfo; optionen: Record<string, string>; figur: Figur; eingabe: Eingabe; aus: () => void; pausiert: boolean; fertig: boolean;
+    mitspieler: Mitspieler | null; zusammen?: { raum: Raum; samen: number }; ausRaum?: () => void } | null = null;
   private vorschau: { renderer: THREE.WebGLRenderer; avatar: Avatar; aus: boolean } | null = null;
 
   constructor() {
@@ -230,9 +244,73 @@ class App {
       h("p", {}, info.text), ...optionen,
       info.ohneListe ? null : h("h3", {}, "🏆 Bestenliste"), info.ohneListe ? null : liste,
       h("div", { class: "knoepfe" },
-        h("button", { class: "gross", onclick: () => { this.profil.optionen[info.id] = { ...opt }; this.speichern(false); this.spielStarten(info, opt); } }, "▶ Spielen"),
+        h("button", { class: "gross", onclick: () => { this.profil.optionen[info.id] = { ...opt }; this.speichern(false); this.spielStarten(info, opt); } }, info.mehrspieler ? "▶ Allein spielen" : "▶ Spielen"),
+        info.mehrspieler ? h("button", { class: "gross", onclick: () => { this.profil.optionen[info.id] = { ...opt }; this.speichern(false); this.raumWahl(info, opt); } }, "👥 Zusammen spielen") : null,
         h("button", { class: "zweit", onclick: () => this.menue() }, "Zurück"))));
     if (!info.ohneListe) ladeListe();
+  }
+
+  // --- Zusammen spielen: Raum öffnen oder beitreten, Leiter startet für alle -------------------------
+  private raum: Raum | null = null;
+
+  private raumWahl(info: SpielInfo, opt: Record<string, string>) {
+    if (this.raum) { this.raumZeigen(info, opt); return; }
+    const feld = h("input", { type: "text", placeholder: "Code, z. B. K7PX", maxlength: 6, style: { textTransform: "uppercase", textAlign: "center", letterSpacing: "0.2em" } });
+    const beitreten = () => { const c = feld.value.trim().toUpperCase(); if (c.length >= 3) this.raumBetreten(c, info, opt); };
+    feld.addEventListener("keydown", (e) => { if (e.key === "Enter") beitreten(); });
+    this.zeigen(h("div", { class: "karte schmal mitte" },
+      h("div", { class: "info-kopf" }, h("span", { class: "emoji gross-emoji" }, info.emoji), h("h2", {}, "Zusammen spielen")),
+      h("p", { class: "leise mitte-text" }, "Ein Gerät öffnet einen Raum, die anderen geben den Code ein."),
+      h("button", { class: "gross", onclick: () => this.raumBetreten(neuerCode(), info, opt) }, "🏠 Neuen Raum öffnen"),
+      h("label", {}, "Oder Code eingeben"), feld,
+      h("button", { class: "zweit", onclick: beitreten }, "Beitreten"),
+      h("button", { class: "zweit", onclick: () => this.spielInfo(info) }, "Zurück")));
+  }
+
+  private raumBetreten(code: string, info: SpielInfo, opt: Record<string, string>) {
+    this.raum?.schliessen();
+    this.raum = new Raum(code, this.profil.name, this.profil.avatar);
+    this.raumZeigen(info, opt);
+  }
+
+  private raumVerlassen() {
+    this.raum?.schliessen();
+    this.raum = null;
+  }
+
+  /** Warteraum: Mitspielerliste, der Leiter startet; Start-Nachricht startet das Spiel überall gleichzeitig */
+  private raumZeigen(info: SpielInfo, opt: Record<string, string>) {
+    const raum = this.raum!;
+    const liste = h("ol", { class: "bestenliste" });
+    const knopf = h("div", { class: "knoepfe" });
+    const stand = h("p", { class: "leise mitte-text" }, "verbinde …");
+    const neu = () => {
+      liste.replaceChildren(...raum.mitglieder.map((m, i) => h("li", { class: m.id === raum.ich ? "ich" : "" }, h("span", {}, `${i === 0 ? "👑 " : ""}${m.name}`))));
+      stand.textContent = raum.offen ? (raum.leiter ? (raum.mitglieder.length > 1 ? "Alle da? Dann los!" : "Warte auf Mitspieler …") : "Warte, bis 👑 startet …") : "Verbindung weg – bitte neu beitreten";
+      knopf.replaceChildren(...[
+        raum.leiter && raum.mitglieder.length > 1 ? h("button", { class: "gross", onclick: () => {
+          const start = { typ: "start", spiel: info.id, optionen: opt, samen: Math.floor(Math.random() * 2 ** 31) };
+          raum.senden(start);
+          los(start);
+        } }, `▶ ${info.titel} starten`) : null,
+        h("button", { class: "zweit", onclick: () => { aus(); this.raumVerlassen(); this.spielInfo(info); } }, "Raum verlassen"),
+      ].filter((x) => !!x) as HTMLElement[]);
+    };
+    const los = (m: any) => {
+      const ziel = SPIELE.find((x) => x.id === m.spiel);
+      if (!ziel || !MODULE[ziel.id]) return;
+      aus();
+      this.spielStarten(ziel, { ...m.optionen }, { raum, samen: Number(m.samen) || 1 });
+    };
+    const aus = raum.hoeren((m) => {
+      if (m.typ === "start") los(m);
+      else if (m.typ === "spieler" || m.typ === "getrennt" || m.typ === "du") neu();
+    });
+    this.zeigen(h("div", { class: "karte schmal mitte" },
+      h("div", { class: "info-kopf" }, h("span", { class: "emoji gross-emoji" }, info.emoji), h("h2", {}, info.titel)),
+      h("p", { class: "mitte-text" }, "Code für die anderen:"), h("p", { class: "zeit-gross" }, raum.code),
+      stand, liste, knopf));
+    neu();
   }
 
   private async weltBereit(): Promise<Welt> {
@@ -247,7 +325,7 @@ class App {
     return this.welt;
   }
 
-  async spielStarten(info: SpielInfo, optionen: Record<string, string>) {
+  async spielStarten(info: SpielInfo, optionen: Record<string, string>, zusammen?: { raum: Raum; samen: number }) {
     let welt: Welt;
     try { welt = await this.weltBereit(); }
     catch (e) { this.zeigen(h("div", { class: "karte schmal mitte" }, h("h2", {}, "Hoppla"), h("p", {}, (e as Error).message), h("button", { class: "gross", onclick: () => this.menue() }, "Zurück"))); return; }
@@ -257,19 +335,31 @@ class App {
     const figur = new Figur(welt, this.profil.avatar, this.profil.kamera);
     const eingabe = new Eingabe(welt.renderer.domElement, this.hud);
     const spiel = MODULE[info.id]();
-    const lauf = { spiel, info, optionen, figur, eingabe, aus: () => {}, pausiert: false, fertig: false };
+    const mitspieler = zusammen ? new Mitspieler(welt, zusammen.raum, figur) : null;
+    const lauf: NonNullable<App["lauf"]> = { spiel, info, optionen, figur, eingabe, aus: () => {}, pausiert: false, fertig: false, mitspieler, zusammen };
     this.lauf = lauf;
     const k: Kontext = { welt, figur, eingabe, optionen,
       hud: { anzeige: (t) => (document.getElementById("anzeige")!.textContent = t), meldung: (t, ms) => this.meldung(t, ms),
         knopf: (id, text, beiDruck) => this.hudKnopf(eingabe, id, text, beiDruck), leiste: () => document.getElementById("leiste")! },
       spieler: { name: this.profil.name, avatar: this.profil.avatar },
+      mp: zusammen && mitspieler ? { raum: zusammen.raum, mitspieler } : undefined,
       fertig: (e) => this.spielFertig(e) };
-    spiel.start(k);
+    if (zusammen) {
+      // gleiche Strecke/Verstecke auf allen Geräten: Zufall beim Aufbau aus dem gemeinsamen Samen
+      const echt = Math.random;
+      Math.random = zufallMitSamen(zusammen.samen);
+      try { spiel.start(k); } finally { Math.random = echt; }
+      lauf.ausRaum = zusammen.raum.hoeren((m) => {
+        if (m.typ === "fertig" && m.von) this.meldung(`${zusammen.raum.nameVon(m.von)}: ${m.text}`, 3000);
+        if (m.typ === "spieler") this.meldung(`👥 ${m.liste.length} im Raum`, 1200);
+      });
+    } else spiel.start(k);
     lauf.aus = welt.schleife((dt) => {
       if (eingabe.einmal("pause")) { if (lauf.pausiert) this.weiter(); else if (!lauf.fertig) this.pausieren(); }
       if (lauf.pausiert) return;
       figur.update(dt, eingabe);
       spiel.update(dt);
+      mitspieler?.update(dt);
       while (eingabe.tipps.length) { const t = eingabe.tipps.shift()!; spiel.tipp?.(t.x, t.y); }
       if (eingabe.einmal("aktion")) spiel.tipp?.(innerWidth / 2, innerHeight / 2);
       document.getElementById("ansichtName")!.textContent = KAMERA_NAME[figur.modus];
@@ -329,8 +419,10 @@ class App {
     if (document.pointerLockElement) document.exitPointerLock();
     this.zeigen(h("div", { class: "karte schmal mitte" }, h("h2", {}, "Pause"),
       h("button", { class: "gross", onclick: () => this.weiter() }, "▶ Weiter"),
-      h("button", { class: "zweit", onclick: () => { const { info, optionen } = l; this.spielBeenden(); this.spielStarten(info, optionen); } }, "↻ Neu starten"),
-      h("button", { class: "zweit", onclick: () => { this.spielBeenden(); this.menue(); } }, "☰ Zurück zum Menü")));
+      l.zusammen
+        ? h("button", { class: "zweit", onclick: () => { const { info, optionen } = l; this.spielBeenden(); this.raumWahl(info, optionen); } }, "👥 Zurück in den Raum")
+        : h("button", { class: "zweit", onclick: () => { const { info, optionen } = l; this.spielBeenden(); this.spielStarten(info, optionen); } }, "↻ Neu starten"),
+      h("button", { class: "zweit", onclick: () => { this.spielBeenden(); this.raumVerlassen(); this.menue(); } }, "☰ Zurück zum Menü")));
   }
 
   weiter() {
@@ -353,8 +445,11 @@ class App {
     const platz = h("p", { class: "platz" }, "");
     setTimeout(() => this.zeigen(h("div", { class: "karte schmal mitte" },
       h("div", { class: "logo" }, "🏆"), h("h2", {}, e.text), h("p", { class: "zeit-gross" }, wertText(l.info, e)), platz, liste,
-      h("button", { class: "gross", onclick: () => { const { info, optionen } = l; this.spielBeenden(); this.spielStarten(info, optionen); } }, "↻ Nochmal"),
-      h("button", { class: "zweit", onclick: () => { this.spielBeenden(); this.menue(); } }, "☰ Menü"))), 900);
+      l.zusammen
+        ? h("button", { class: "gross", onclick: () => { const { info, optionen } = l; this.spielBeenden(); this.raumWahl(info, optionen); } }, "👥 Zurück in den Raum")
+        : h("button", { class: "gross", onclick: () => { const { info, optionen } = l; this.spielBeenden(); this.spielStarten(info, optionen); } }, "↻ Nochmal"),
+      h("button", { class: "zweit", onclick: () => { this.spielBeenden(); this.raumVerlassen(); this.menue(); } }, "☰ Menü"))), 900);
+    l.zusammen?.raum.senden({ typ: "fertig", text: `${e.text} (${wertText(l.info, e)})` });
     if (l.info.ohneListe) return;
     try {
       const r = await api.bestzeit({ spiel: l.info.id, variante, name: this.profil.name, zeit_ms: e.zeit_ms, punkte: e.punkte });
@@ -367,6 +462,8 @@ class App {
     const l = this.lauf;
     if (!l) return;
     l.aus();
+    l.ausRaum?.();
+    l.mitspieler?.entfernen();
     l.spiel.ende();
     l.figur.entfernen();
     l.eingabe.freigeben();

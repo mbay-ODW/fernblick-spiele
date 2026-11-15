@@ -81,7 +81,7 @@ def name_pruefen(name: str) -> str:
 
 # --- Bestzeiten ---------------------------------------------------------------------
 # Spiele, bei denen Punkte zählen (mehr ist besser); sonst die kürzeste Zeit
-PUNKTE_SPIELE = {"lava", "tycoon"}
+PUNKTE_SPIELE = {"lava", "tycoon", "feuerwache"}
 
 
 def bestzeiten(spiel: str, variante: str, anzahl: int = 10) -> list[dict[str, Any]]:
