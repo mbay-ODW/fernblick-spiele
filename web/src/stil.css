@@ -27,6 +27,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--gruen)
 .logo { font-size: 46px; text-align: center; }
 .leise { color: var(--leise); font-size: 14px; }
 .fehler { color: var(--rot); margin: 0; }
+/* Eingabefelder müssen markier- und antippbar bleiben (iOS ignoriert sonst Tastatureingaben) */
+input, textarea { -webkit-user-select: text; user-select: text; touch-action: manipulation; }
 input[type="text"], input[type="password"] { font: inherit; font-size: 18px; padding: 12px 14px; border-radius: 12px; border: 2px solid #d8d0bd; background: #fff; width: 100%; }
 button { font: inherit; cursor: pointer; border: 0; }
 button.gross { background: var(--gruen2); color: #fff; font-size: 20px; font-weight: 800; padding: 14px; border-radius: 14px; box-shadow: 0 4px 0 #22331d; }

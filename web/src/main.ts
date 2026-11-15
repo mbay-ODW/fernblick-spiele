@@ -76,7 +76,7 @@ class App {
       try { await api.anmelden(kw.value); this.menue(); }
       catch (e) { this.anmeldung((e as Error).message); }
     };
-    kw.onkeydown = (e) => e.key === "Enter" && los();
+    kw.addEventListener("keydown", (e) => { if (e.key === "Enter") los(); });
     this.zeigen(h("div", { class: "karte schmal mitte" },
       h("div", { class: "logo" }, "🏡"), h("h1", {}, "Fernblick-Spiele"),
       h("p", { class: "leise" }, "Bitte das Familien-Kennwort eingeben."), kw,
@@ -115,7 +115,7 @@ class App {
     api.spieler().then((alle: any[]) => {
       for (const s of alle) liste.append(h("button", { class: "chip", onclick: () => weiter(s.name, s.avatar, s.einstellungen?.kamera) }, `👤 ${s.name}`));
     }).catch(() => {});
-    name.onkeydown = (e) => e.key === "Enter" && weiter(name.value);
+    name.addEventListener("keydown", (e) => { if (e.key === "Enter") weiter(name.value); });
     this.zeigen(h("div", { class: "karte schmal mitte" }, h("h2", {}, "Wer spielt?"), liste, name,
       h("button", { class: "gross", onclick: () => weiter(name.value) }, "Weiter")));
     setTimeout(() => name.focus(), 50);
