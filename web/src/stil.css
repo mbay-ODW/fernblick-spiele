@@ -1,0 +1,99 @@
+:root {
+  --gruen: #24361f;
+  --gruen2: #3f5a36;
+  --creme: #f6f1e6;
+  --gold: #f2c230;
+  --text: #22301e;
+  --leise: #6d6f63;
+  --rot: #c0392b;
+  --rad: 16px;
+  font-family: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--text);
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--gruen); overscroll-behavior: none; touch-action: none; user-select: none; -webkit-user-select: none; }
+#buehne { position: fixed; inset: 0; }
+#buehne canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+/* Ebene: Menüs und Dialoge */
+#ebene { position: fixed; inset: 0; overflow: auto; touch-action: pan-y; background: radial-gradient(circle at 30% 20%, #4d6b3f 0%, var(--gruen) 70%); padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left)); }
+#ebene[hidden] { display: none; }
+#hud:not([hidden]) ~ #ebene { background: rgba(20, 30, 18, 0.55); backdrop-filter: blur(4px); }
+.karte { background: var(--creme); border-radius: 22px; padding: 26px 24px; box-shadow: 0 12px 40px #0004; display: flex; flex-direction: column; gap: 12px; }
+.karte.schmal { max-width: 420px; }
+.mitte { margin: 6vh auto; }
+.mitte-text { text-align: center; }
+.karte h1, .karte h2 { margin: 0; text-align: center; }
+.logo { font-size: 46px; text-align: center; }
+.leise { color: var(--leise); font-size: 14px; }
+.fehler { color: var(--rot); margin: 0; }
+input[type="text"], input[type="password"] { font: inherit; font-size: 18px; padding: 12px 14px; border-radius: 12px; border: 2px solid #d8d0bd; background: #fff; width: 100%; }
+button { font: inherit; cursor: pointer; border: 0; }
+button.gross { background: var(--gruen2); color: #fff; font-size: 20px; font-weight: 800; padding: 14px; border-radius: 14px; box-shadow: 0 4px 0 #22331d; }
+button.gross:active { transform: translateY(2px); box-shadow: 0 2px 0 #22331d; }
+button.zweit { background: #e7dfcc; color: var(--text); font-size: 17px; font-weight: 700; padding: 12px; border-radius: 14px; }
+.knoepfe { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { background: #fff; border: 2px solid #ddd3bd; border-radius: 999px; padding: 8px 14px; font-weight: 700; font-size: 15px; color: var(--text); }
+.chip.an { background: var(--gold); border-color: #c99a14; }
+.zeile { display: flex; flex-direction: column; gap: 6px; }
+.zeile > label, .karte > label { font-weight: 800; font-size: 14px; color: var(--leise); text-transform: uppercase; letter-spacing: .04em; }
+
+/* Menü */
+.menue { max-width: 1100px; margin: 0 auto; }
+.menue header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; color: #fff; }
+.menue .titel { display: flex; align-items: center; gap: 12px; }
+.menue h1 { margin: 0; font-size: 30px; }
+.menue .titel .leise { color: #cfdcbf; }
+.menue .spieler { display: flex; gap: 8px; flex-wrap: wrap; }
+.kacheln { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.kachel { position: relative; background: var(--creme); border-radius: 20px; padding: 18px 16px; text-align: left; display: flex; flex-direction: column; gap: 4px; min-height: 140px; box-shadow: 0 6px 0 #1a2716; transition: transform .1s; color: var(--text); }
+.kachel:active { transform: translateY(3px); box-shadow: 0 3px 0 #1a2716; }
+.kachel .emoji { font-size: 40px; }
+.kachel strong { font-size: 19px; }
+.kachel.bald { opacity: .62; }
+.kachel .marke { position: absolute; top: 12px; right: 12px; background: #e7dfcc; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 800; }
+.info { max-width: 560px; }
+.info-kopf { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.gross-emoji { font-size: 44px; }
+.bestenliste { margin: 0; padding: 0 0 0 28px; display: flex; flex-direction: column; gap: 4px; }
+.bestenliste li { padding: 4px 10px; border-radius: 10px; }
+.bestenliste li > span { display: inline-flex; }
+.bestenliste li span:first-child { min-width: 60%; font-weight: 700; }
+.bestenliste li.ich { background: #fbe9a8; }
+.zeit-gross { font-size: 44px; font-weight: 900; text-align: center; margin: 0; }
+.platz { text-align: center; font-size: 20px; font-weight: 800; margin: 0; }
+.balken { height: 14px; background: #e1d8c3; border-radius: 999px; overflow: hidden; }
+.balken-innen { height: 100%; width: 0; background: var(--gold); transition: width .2s; }
+
+/* Avatar-Editor */
+.editor { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(300px, 1.3fr); gap: 16px; max-width: 1000px; margin: 0 auto; }
+.editor-links { background: radial-gradient(circle at 50% 40%, #fff6dd, #d7caa7); border-radius: 22px; min-height: 360px; display: flex; flex-direction: column; }
+.avatar-vorschau { flex: 1; min-height: 320px; }
+.avatar-vorschau canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+.editor-rechts { background: var(--creme); border-radius: 22px; padding: 18px; display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 40px); overflow: auto; }
+.editor-rechts h2 { margin: 0; }
+.farben { display: flex; flex-wrap: wrap; gap: 8px; }
+.farbe { width: 36px; height: 36px; border-radius: 10px; border: 3px solid #fff; box-shadow: 0 0 0 1px #0002; }
+.farbe.an { border-color: var(--gold); box-shadow: 0 0 0 2px #c99a14; }
+@media (max-width: 700px) { .editor { grid-template-columns: 1fr; } .editor-links { min-height: 260px; } .editor-rechts { max-height: none; } }
+
+/* HUD im Spiel */
+#hud { position: fixed; inset: 0; pointer-events: none; }
+#hud[hidden] { display: none; }
+#hud button { pointer-events: auto; }
+.hud-oben { position: absolute; top: max(12px, env(safe-area-inset-top)); left: 12px; right: 12px; display: flex; justify-content: center; align-items: flex-start; }
+.anzeige { background: #000a; color: #fff; font-weight: 900; font-size: 22px; padding: 8px 18px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.anzeige:empty { display: none; }
+.hud-knoepfe { position: absolute; right: max(0px, env(safe-area-inset-right)); top: 0; display: flex; gap: 10px; }
+.rund { width: 52px; height: 52px; border-radius: 50%; background: #000a; color: #fff; font-size: 24px; }
+.ansicht-name { position: absolute; top: calc(max(12px, env(safe-area-inset-top)) + 58px); right: 14px; color: #fff; font-size: 13px; font-weight: 800; text-shadow: 0 1px 3px #000; }
+.meldung { position: absolute; top: 28%; left: 50%; transform: translateX(-50%); background: #000b; color: #fff; font-size: 26px; font-weight: 900; padding: 12px 24px; border-radius: 18px; text-align: center; }
+.meldung[hidden] { display: none; }
+.fadenkreuz { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: #fff; font-size: 28px; text-shadow: 0 0 3px #000; }
+.fadenkreuz[hidden] { display: none; }
+.sprung { position: absolute; right: max(24px, env(safe-area-inset-right)); bottom: max(28px, env(safe-area-inset-bottom)); width: 86px; height: 86px; border-radius: 50%; background: #fff3; border: 3px solid #fffb !important; color: #fff; font-size: 38px; font-weight: 900; backdrop-filter: blur(2px); }
+.knueppel { position: absolute; width: 130px; height: 130px; margin: -65px 0 0 -65px; border-radius: 50%; background: #fff2; border: 3px solid #fff8; }
+.knueppel[hidden] { display: none; }
+.knueppel-griff { position: absolute; left: 50%; top: 50%; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%; background: #fffc; }
+.toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #000c; color: #fff; padding: 12px 20px; border-radius: 14px; font-weight: 800; z-index: 9; }

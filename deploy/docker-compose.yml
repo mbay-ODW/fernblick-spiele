@@ -1,0 +1,42 @@
+# Fernblick-Spiele – Stack für docker compose / Portainer
+# Eigene Anmeldung mit Familien-Kennwort (kein Forward-Auth). Die Hauswelt holt der Server per Token
+# beim Fernblick-Planer (/spielwelt/*). Alle umgebungsspezifischen Werte kommen aus Variablen
+# (siehe deploy/.env.example), keine Vorgaben im Repo. Daten (Hauswelt-Kopie, Spieler, Bestzeiten) unter ${DATEN_PFAD}.
+name: ${STACK:-fernblick-spiele}
+
+services:
+  app:
+    image: ${IMAGE:?IMAGE fehlt (z. B. ghcr.io/<owner>/fernblick-spiele)}:${IMAGE_TAG:-latest}
+    container_name: ${STACK:-fernblick-spiele}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 10s
+    mem_limit: 384m
+    environment:
+      SPIELE_DATA: /data
+      SPIELE_PUBLIC_URL: https://${SPIELE_HOST:?SPIELE_HOST fehlt}
+      SPIELE_KENNWORT: ${SPIELE_KENNWORT:?SPIELE_KENNWORT fehlt}
+      # X-Forwarded-For nur vom Reverse-Proxy übernehmen (Sperre nach Fehlversuchen je IP)
+      SPIELE_TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      PLANER_URL: ${PLANER_URL:?PLANER_URL fehlt}
+      SPIELWELT_TOKEN: ${SPIELWELT_TOKEN:?SPIELWELT_TOKEN fehlt}
+      TZ: Europe/Berlin
+    volumes:
+      - ${DATEN_PFAD:?DATEN_PFAD fehlt}/data:/data
+    networks: [traefik]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
+      - traefik.http.services.${STACK:-fernblick-spiele}.loadbalancer.server.port=8000
+      - traefik.http.routers.${STACK:-fernblick-spiele}.rule=Host(`${SPIELE_HOST:?SPIELE_HOST fehlt}`)
+      - traefik.http.routers.${STACK:-fernblick-spiele}.entrypoints=websecure
+      - traefik.http.routers.${STACK:-fernblick-spiele}.tls.certresolver=${TRAEFIK_CERTRESOLVER:?TRAEFIK_CERTRESOLVER fehlt}
+      - traefik.http.routers.${STACK:-fernblick-spiele}.middlewares=${STACK:-fernblick-spiele}-ohne-sso${TRAEFIK_MIDDLEWARES:+,}${TRAEFIK_MIDDLEWARES:-}
+      # Keine vom Client gesetzten Remote-User-Header durchreichen
+      - traefik.http.middlewares.${STACK:-fernblick-spiele}-ohne-sso.headers.customrequestheaders.Remote-User=
+      - traefik.http.middlewares.${STACK:-fernblick-spiele}-ohne-sso.headers.customrequestheaders.Remote-Groups=
+
+networks:
+  traefik:
+    name: ${TRAEFIK_NETWORK:-traefik}
+    external: true
